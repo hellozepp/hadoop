@@ -19,10 +19,10 @@
 package org.apache.hadoop.fs.aliyun.oss;
 
 import com.aliyun.oss.model.PartETag;
-import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.Futures;
-import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ListenableFuture;
-import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ListeningExecutorService;
-import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.hadoop.conf.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
@@ -108,10 +109,13 @@ public class AliyunOSSBlockOutputStream extends OutputStream {
       } else {
         if (blockWritten > 0) {
           ListenableFuture<PartETag> partETagFuture =
-              executorService.submit(() -> {
-                PartETag partETag = store.uploadPart(blockFile, key, uploadId,
-                    blockId);
-                return partETag;
+              executorService.submit(new Callable<PartETag>() {
+                @Override
+                public PartETag call() throws Exception {
+                  PartETag partETag = store.uploadPart(blockFile, key, uploadId,
+                      blockId);
+                  return partETag;
+                }
               });
           partETagsFutures.add(partETagFuture);
         }
@@ -184,13 +188,16 @@ public class AliyunOSSBlockOutputStream extends OutputStream {
     blockId++;
     blockFiles.put(blockId, blockFile);
 
-    File currentFile = blockFile;
-    int currentBlockId = blockId;
+    final File currentFile = blockFile;
+    final int currentBlockId = blockId;
     ListenableFuture<PartETag> partETagFuture =
-        executorService.submit(() -> {
-          PartETag partETag = store.uploadPart(currentFile, key, uploadId,
-              currentBlockId);
-          return partETag;
+        executorService.submit(new Callable<PartETag>() {
+          @Override
+          public PartETag call() throws Exception {
+            PartETag partETag = store.uploadPart(currentFile, key, uploadId,
+                currentBlockId);
+            return partETag;
+          }
         });
     partETagsFutures.add(partETagFuture);
     removePartFiles();

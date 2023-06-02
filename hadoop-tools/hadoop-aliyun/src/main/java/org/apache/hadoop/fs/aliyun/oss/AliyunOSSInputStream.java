@@ -18,21 +18,21 @@
 
 package org.apache.hadoop.fs.aliyun.oss;
 
+import static org.apache.hadoop.fs.aliyun.oss.Constants.*;
+
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.MoreExecutors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.google.common.util.concurrent.MoreExecutors;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileSystem.Statistics;
-
-import static org.apache.hadoop.fs.aliyun.oss.Constants.*;
 
 /**
  * The input stream for OSS blob system.
@@ -40,7 +40,7 @@ import static org.apache.hadoop.fs.aliyun.oss.Constants.*;
  * stream.
  */
 public class AliyunOSSInputStream extends FSInputStream {
-  public static final Logger LOG = LoggerFactory.getLogger(AliyunOSSInputStream.class);
+  public static final Log LOG = LogFactory.getLog(AliyunOSSInputStream.class);
   private final long downloadPartSize;
   private AliyunOSSFileSystemStore store;
   private final String key;

@@ -27,9 +27,10 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.CreateFlag;
@@ -77,8 +78,8 @@ public class AliyunOSSFileSystem extends FileSystem {
   private int maxKeys;
   private int maxReadAheadPartNumber;
   private int maxConcurrentCopyTasksPerDir;
-  private ExecutorService boundedThreadPool;
-  private ExecutorService boundedCopyThreadPool;
+  private ListeningExecutorService boundedThreadPool;
+  private ListeningExecutorService boundedCopyThreadPool;
 
   private static final PathFilter DEFAULT_FILTER = new PathFilter() {
     @Override
@@ -402,6 +403,58 @@ public class AliyunOSSFileSystem extends FileSystem {
   }
 
   @Override
+  public RemoteIterator<LocatedFileStatus> listFiles(
+      final Path f, final boolean recursive) throws IOException {
+    Path qualifiedPath = f.makeQualified(uri, workingDir);
+    final FileStatus status = getFileStatus(qualifiedPath);
+    PathFilter filter = new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return status.isFile() || !path.equals(f);
+      }
+    };
+    FileStatusAcceptor acceptor =
+        new FileStatusAcceptor.AcceptFilesOnly(qualifiedPath);
+    return innerList(f, status, filter, acceptor, recursive);
+  }
+
+  @Override
+  public RemoteIterator<LocatedFileStatus> listLocatedStatus(Path f)
+    throws IOException {
+    return listLocatedStatus(f, DEFAULT_FILTER);
+  }
+
+  @Override
+  public RemoteIterator<LocatedFileStatus> listLocatedStatus(final Path f,
+      final PathFilter filter) throws IOException {
+    Path qualifiedPath = f.makeQualified(uri, workingDir);
+    final FileStatus status = getFileStatus(qualifiedPath);
+    FileStatusAcceptor acceptor =
+        new FileStatusAcceptor.AcceptAllButSelf(qualifiedPath);
+    return innerList(f, status, filter, acceptor, false);
+  }
+
+  private RemoteIterator<LocatedFileStatus> innerList(final Path f,
+      final FileStatus status,
+      final PathFilter filter,
+      final FileStatusAcceptor acceptor,
+      final boolean recursive) throws IOException {
+    Path qualifiedPath = f.makeQualified(uri, workingDir);
+    String key = pathToKey(qualifiedPath);
+
+    if (status.isFile()) {
+      LOG.debug("{} is a File", qualifiedPath);
+      final BlockLocation[] locations = getFileBlockLocations(status,
+        0, status.getLen());
+      return store.singleStatusRemoteIterator(filter.accept(f) ? status : null,
+        locations);
+    } else {
+      return store.createLocatedFileStatusIterator(key, maxKeys, this, filter,
+        acceptor, recursive ? null : "/");
+    }
+  }
+
+  @Override
   public FileStatus[] listStatus(Path path) throws IOException {
     String key = pathToKey(path);
     if (LOG.isDebugEnabled()) {
@@ -470,58 +523,6 @@ public class AliyunOSSFileSystem extends FileSystem {
     }
 
     return result.toArray(new FileStatus[result.size()]);
-  }
-
-  @Override
-  public RemoteIterator<LocatedFileStatus> listFiles(
-      final Path f, final boolean recursive) throws IOException {
-    Path qualifiedPath = f.makeQualified(uri, workingDir);
-    final FileStatus status = getFileStatus(qualifiedPath);
-    PathFilter filter = new PathFilter() {
-      @Override
-      public boolean accept(Path path) {
-        return status.isFile() || !path.equals(f);
-      }
-    };
-    FileStatusAcceptor acceptor =
-        new FileStatusAcceptor.AcceptFilesOnly(qualifiedPath);
-    return innerList(f, status, filter, acceptor, recursive);
-  }
-
-  @Override
-  public RemoteIterator<LocatedFileStatus> listLocatedStatus(Path f)
-      throws IOException {
-    return listLocatedStatus(f, DEFAULT_FILTER);
-  }
-
-  @Override
-  public RemoteIterator<LocatedFileStatus> listLocatedStatus(final Path f,
-      final PathFilter filter) throws IOException {
-    Path qualifiedPath = f.makeQualified(uri, workingDir);
-    final FileStatus status = getFileStatus(qualifiedPath);
-    FileStatusAcceptor acceptor =
-        new FileStatusAcceptor.AcceptAllButSelf(qualifiedPath);
-    return innerList(f, status, filter, acceptor, false);
-  }
-
-  private RemoteIterator<LocatedFileStatus> innerList(final Path f,
-      final FileStatus status,
-      final PathFilter filter,
-      final FileStatusAcceptor acceptor,
-      final boolean recursive) throws IOException {
-    Path qualifiedPath = f.makeQualified(uri, workingDir);
-    String key = pathToKey(qualifiedPath);
-
-    if (status.isFile()) {
-      LOG.debug("{} is a File", qualifiedPath);
-      final BlockLocation[] locations = getFileBlockLocations(status,
-          0, status.getLen());
-      return store.singleStatusRemoteIterator(filter.accept(f) ? status : null,
-          locations);
-    } else {
-      return store.createLocatedFileStatusIterator(key, maxKeys, this, filter,
-          acceptor, recursive ? null : "/");
-    }
   }
 
   /**

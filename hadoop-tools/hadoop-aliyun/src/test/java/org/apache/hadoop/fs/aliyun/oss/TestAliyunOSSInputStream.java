@@ -192,6 +192,7 @@ public class TestAliyunOSSInputStream {
     assertTrue(instream.available() == 0);
     IOUtils.closeStream(instream);
   }
+
   @Test
   public void testDirectoryModifiedTime() throws Exception {
     Path emptyDirPath = setPath("/test/emptyDirectory");
