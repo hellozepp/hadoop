@@ -1161,8 +1161,38 @@
             <artifactId>commons-beanutils</artifactId>
           </exclusion>
         </exclusions>
-     </dependency>
-
+      </dependency>
+      <dependency>
+          <groupId>com.squareup.okio</groupId>
+          <artifactId>okio</artifactId>
+          <version>1.13.0</version>
+          <scope>compile</scope>
+      </dependency>
+      <dependency>
+          <groupId>org.jacoco</groupId>
+          <artifactId>org.jacoco.agent</artifactId>
+          <version>0.8.4</version>
+          <scope>compile</scope>
+      </dependency>
+      <dependency>
+          <groupId>com.aliyun</groupId>
+          <artifactId>credentials-java</artifactId>
+          <version>0.2.12</version>
+          <exclusions>
+              <exclusion>
+                  <groupId>com.sun.xml.bind</groupId>
+                  <artifactId>jaxb-impl</artifactId>
+              </exclusion>
+              <exclusion>
+                  <groupId>org.jacoco</groupId>
+                  <artifactId>org.jacoco.agent</artifactId>
+              </exclusion>
+              <exclusion>
+                  <groupId>com.squareup.okio</groupId>
+                  <artifactId>okio</artifactId>
+              </exclusion>
+          </exclusions>
+      </dependency>
      <dependency>
        <groupId>org.apache.curator</groupId>
        <artifactId>curator-recipes</artifactId>

@@ -21,8 +21,16 @@ package org.apache.hadoop.fs.aliyun.oss;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.aliyun.oss.common.auth.CredentialsProvider;
+import com.aliyun.credentials.utils.AuthUtils;
+import com.aliyuncs.auth.AlibabaCloudCredentialsProvider;
+import com.aliyuncs.auth.InstanceProfileCredentialsProvider;
+import com.aliyuncs.profile.DefaultProfile;
+import com.aliyuncs.profile.IClientProfile;
 import com.google.common.base.Preconditions;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -94,7 +102,10 @@ final public class AliyunOSSUtils {
 
   /**
    * Create credential provider specified by configuration, or create default
-   * credential provider if not specified.
+   * credential provider if not specified. If CREDENTIALS_PROVIDER_KEY is not
+   * set, use the default AliyunCredentialsProvider. If CREDENTIALS_PROVIDER_KEY
+   * and ASSUMED_ROLE_CREDENTIALS_PROVIDER_KEY are set at the same time, use
+   * the combined method to obtain the STS Credentials Provider.
    *
    * @param uri uri passed by caller
    * @param conf configuration
@@ -104,41 +115,63 @@ final public class AliyunOSSUtils {
    */
   public static CredentialsProvider getCredentialsProvider(
       URI uri, Configuration conf) throws IOException {
-    CredentialsProvider credentials;
-
-    String className = conf.getTrimmed(CREDENTIALS_PROVIDER_KEY);
-    if (StringUtils.isEmpty(className)) {
+    String credentialProviderName = conf.getTrimmed(CREDENTIALS_PROVIDER_KEY, "");
+    String instanceProviderName = conf.getTrimmed(ASSUMED_ROLE_CREDENTIALS_PROVIDER_KEY,
+        InstanceProfileCredentialsProvider.class.getName());
+    CredentialsProvider destProvider;
+    if (StringUtils.isEmpty(credentialProviderName)) {
       Configuration newConf =
           ProviderUtils.excludeIncompatibleCredentialProviders(conf,
               AliyunOSSFileSystem.class);
-      credentials = new AliyunCredentialsProvider(newConf);
+      destProvider = new AliyunCredentialsProvider(newConf);
     } else {
       try {
-        LOG.debug("Credential provider class is:" + className);
-        Class<?> credClass = Class.forName(className);
-        try {
-          credentials =
-              (CredentialsProvider)credClass.getDeclaredConstructor(
-                  URI.class, Configuration.class).newInstance(uri, conf);
-        } catch (NoSuchMethodException | SecurityException e) {
-          credentials =
-              (CredentialsProvider)credClass.getDeclaredConstructor()
-              .newInstance();
+        LOG.debug("Credential provider class is:" + credentialProviderName);
+        Class<?> credClass = Class.forName(credentialProviderName);
+        if (StringUtils.isNotEmpty(instanceProviderName)) {
+          LOG.debug("instance profile Credential provider class is:" + instanceProviderName);
+          Class<?> instClass = Class.forName(instanceProviderName);
+          String roleArn = conf.getTrimmed(ALIYUN_STS_ROLE_ARN_KEY, "");
+          if (StringUtils.isEmpty(roleArn)) {
+            throw new IllegalArgumentException("Aliyun assumed roleArn should not be empty. Please set " +
+                                                   "the value of " + ALIYUN_STS_ROLE_ARN_KEY + ".");
+          }
+          String region = conf.getTrimmed(FS_OSS_REGION, "");
+          if (StringUtils.isEmpty(region)) {
+            String endPoint = conf.getTrimmed(ENDPOINT_KEY);
+            region = getRegionFromEndpoint(endPoint);
+          }
+          DefaultProfile profile = DefaultProfile.getProfile(region);
+          String k8sRole = AuthUtils.getEnvironmentECSMetaData();
+          LOG.info("ack role name 1 is {}", k8sRole);
+          AlibabaCloudCredentialsProvider instProvider =
+              (AlibabaCloudCredentialsProvider) instClass.getDeclaredConstructor(String.class)
+                                                    .newInstance(k8sRole);
+          destProvider = (CredentialsProvider) credClass.getDeclaredConstructor(
+                  AlibabaCloudCredentialsProvider.class, String.class, IClientProfile.class)
+                                                   .newInstance(instProvider, roleArn, profile);
+        } else {
+          try {
+            destProvider = (CredentialsProvider) credClass.getDeclaredConstructor(
+                URI.class, Configuration.class).newInstance(uri, conf);
+          } catch (NoSuchMethodException | SecurityException e) {
+            destProvider = (CredentialsProvider) credClass.getDeclaredConstructor().newInstance();
+          }
         }
       } catch (ClassNotFoundException e) {
-        throw new IOException(className + " not found.", e);
+        throw new IOException(credentialProviderName + " not found.", e);
       } catch (NoSuchMethodException | SecurityException e) {
         throw new IOException(String.format("%s constructor exception.  A " +
             "class specified in %s must provide an accessible constructor " +
             "accepting URI and Configuration, or an accessible default " +
-            "constructor.", className, CREDENTIALS_PROVIDER_KEY),
+            "constructor.", credentialProviderName, CREDENTIALS_PROVIDER_KEY),
             e);
       } catch (ReflectiveOperationException | IllegalArgumentException e) {
-        throw new IOException(className + " instantiation exception.", e);
+        throw new IOException(credentialProviderName + " instantiation exception.", e);
       }
     }
 
-    return credentials;
+    return destProvider;
   }
 
   /**
@@ -249,4 +282,62 @@ final public class AliyunOSSUtils {
     }
     return partSize;
   }
+
+    /**
+     * @param source Source Configuration object.
+     * @param bucket bucket name. Must not be empty.
+     * @return a (potentially) patched clone of the original.
+     */
+    public static Configuration propagateBucketOptions(Configuration source,
+                                                       String bucket) {
+        Preconditions.checkArgument(StringUtils.isNotEmpty(bucket), "bucket");
+        final String bucketPrefix = FS_OSS_BUCKET_PREFIX + bucket +'.';
+        LOG.debug("Propagating entries under {}", bucketPrefix);
+        final Configuration dest = new Configuration(source);
+        for (Map.Entry<String, String> entry : source) {
+            final String key = entry.getKey();
+            // get the (unexpanded) value.
+            final String value = entry.getValue();
+            if (!key.startsWith(bucketPrefix) || bucketPrefix.equals(key)) {
+                continue;
+            }
+            // there's a bucket prefix, so strip it
+            final String stripped = key.substring(bucketPrefix.length());
+            if (stripped.startsWith("bucket.") || "impl".equals(stripped)) {
+                //tell user off
+                LOG.debug("Ignoring bucket option {}", key);
+            }  else {
+                // propagate the value, building a new origin field.
+                // to track overwrites, the generic key is overwritten even if
+                // already matches the new one.
+                String origin = "[" + StringUtils.join(
+                        source.getPropertySources(key), ", ") +"]";
+                final String generic = FS_OSS_PREFIX + stripped;
+                LOG.debug("Updating {} from {}", generic, origin);
+                dest.set(generic, value, key + " via " + origin);
+            }
+        }
+        return dest;
+    }
+
+    /**
+     * A simple way to get regionId from endpoint for the scene where
+     * Constants.FS_OSS_REGION is not obtained.
+     * @param endpoint The endpoint of OSS
+     * @return regionId
+     */
+    private static String getRegionFromEndpoint(String endpoint) {
+        String region = "oss-cn-hangzhou";
+        if (endpoint.contains("oss.aliyuncs.com") || endpoint.contains("oss-internal.aliyuncs.com")) {
+            return region;
+        } else {
+            String pattern = "(.*).aliyuncs.com";
+            Pattern r = Pattern.compile(pattern);
+            Matcher m = r.matcher(endpoint.replace("-internal", ""));
+            if (m.find()) {
+                region = m.group(1);
+            }
+            return region;
+        }
+    }
 }

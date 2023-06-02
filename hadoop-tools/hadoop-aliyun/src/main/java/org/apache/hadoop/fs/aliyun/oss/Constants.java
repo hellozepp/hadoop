@@ -37,6 +37,10 @@ public final class Constants {
   public static final String CREDENTIALS_PROVIDER_KEY =
       "fs.oss.credentials.provider";
 
+  // Class of assumed role credential provider
+  public static final String ASSUMED_ROLE_CREDENTIALS_PROVIDER_KEY =
+      "fs.oss.assumed.role.credentials.provider";
+
   public static final int OSS_DEFAULT_PORT = -1;
 
   // OSS access verification
@@ -155,4 +159,14 @@ public final class Constants {
       "fs.oss.upload.active.blocks";
   public static final int UPLOAD_ACTIVE_BLOCKS_DEFAULT = 4;
 
+  public static final String FS_OSS_PREFIX = "fs.oss.";
+
+  // Prefix for oss bucket-specific properties
+  public static final String FS_OSS_BUCKET_PREFIX = "fs.oss.bucket.";
+
+  // ARN of OSS Assumed Role
+  public static final String ALIYUN_STS_ROLE_ARN_KEY = FS_OSS_PREFIX + "assumed.role.arn";
+
+  // region of OSS RAM
+  public static final String FS_OSS_REGION = FS_OSS_PREFIX + "region";
 }

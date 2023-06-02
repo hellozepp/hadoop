@@ -73,6 +73,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.NoSuchElementException;
 
+import static org.apache.hadoop.fs.aliyun.oss.AliyunOSSUtils.propagateBucketOptions;
 import static org.apache.hadoop.fs.aliyun.oss.Constants.*;
 
 /**
@@ -91,8 +92,13 @@ public class AliyunOSSFileSystemStore {
   private int maxKeys;
   private String serverSideEncryptionAlgorithm;
 
-  public void initialize(URI uri, Configuration conf, String user,
+  public void initialize(URI uri, Configuration originalConf, String user,
                          FileSystem.Statistics stat) throws IOException {
+    bucketName = uri.getHost();
+    LOG.debug("Initializing AliyunOSSFileSystemStore for bucket: {}", bucketName);
+    // clone the configuration into one with propagated bucket options
+    Configuration conf = propagateBucketOptions(originalConf, bucketName);
+
     this.username = user;
     statistics = stat;
     ClientConfiguration clientConf = new ClientConfiguration();
@@ -148,7 +154,8 @@ public class AliyunOSSFileSystemStore {
     String endPoint = conf.getTrimmed(ENDPOINT_KEY, "");
     if (StringUtils.isEmpty(endPoint)) {
       throw new IllegalArgumentException("Aliyun OSS endpoint should not be " +
-          "null or empty. Please set proper endpoint with 'fs.oss.endpoint'.");
+                                             "null or empty. Please set 'fs.oss.<bucket_name>.endpoint' or " +
+                                             "'fs.oss.endpoint'.");
     }
     CredentialsProvider provider =
         AliyunOSSUtils.getCredentialsProvider(uri, conf);
@@ -158,8 +165,6 @@ public class AliyunOSSFileSystemStore {
 
     serverSideEncryptionAlgorithm =
         conf.get(SERVER_SIDE_ENCRYPTION_ALGORITHM_KEY, "");
-
-    bucketName = uri.getHost();
 
     String cannedACLName = conf.get(CANNED_ACL_KEY, CANNED_ACL_DEFAULT);
     if (StringUtils.isNotEmpty(cannedACLName)) {
