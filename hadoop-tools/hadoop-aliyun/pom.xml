@@ -126,13 +126,25 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
       <scope>compile</scope>
+        <exclusions>
+            <exclusion>
+                <artifactId>slf4j-log4j12</artifactId>
+                <groupId>org.slf4j</groupId>
+            </exclusion>
+        </exclusions>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
       <scope>test</scope>
-      <type>test-jar</type>
+        <exclusions>
+            <exclusion>
+                <artifactId>slf4j-log4j12</artifactId>
+                <groupId>org.slf4j</groupId>
+            </exclusion>
+        </exclusions>
+        <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -156,6 +168,12 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
       <scope>test</scope>
+        <exclusions>
+            <exclusion>
+                <artifactId>slf4j-log4j12</artifactId>
+                <groupId>org.slf4j</groupId>
+            </exclusion>
+        </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
