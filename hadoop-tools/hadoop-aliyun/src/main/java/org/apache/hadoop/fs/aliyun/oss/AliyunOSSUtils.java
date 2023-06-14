@@ -28,11 +28,10 @@ import java.util.regex.Pattern;
 import com.aliyun.oss.common.auth.CredentialsProvider;
 import com.aliyun.credentials.utils.AuthUtils;
 import com.aliyuncs.auth.AlibabaCloudCredentialsProvider;
-import com.aliyuncs.auth.InstanceProfileCredentialsProvider;
 import com.aliyuncs.profile.DefaultProfile;
 import com.aliyuncs.profile.IClientProfile;
-import com.google.common.base.Preconditions;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.security.ProviderUtils;
@@ -116,8 +115,7 @@ final public class AliyunOSSUtils {
   public static CredentialsProvider getCredentialsProvider(
       URI uri, Configuration conf) throws IOException {
     String credentialProviderName = conf.getTrimmed(CREDENTIALS_PROVIDER_KEY, "");
-    String instanceProviderName = conf.getTrimmed(ASSUMED_ROLE_CREDENTIALS_PROVIDER_KEY,
-        InstanceProfileCredentialsProvider.class.getName());
+    String instanceProviderName = conf.getTrimmed(ASSUMED_ROLE_CREDENTIALS_PROVIDER_KEY, "");
     CredentialsProvider destProvider;
     if (StringUtils.isEmpty(credentialProviderName)) {
       Configuration newConf =
@@ -327,11 +325,11 @@ final public class AliyunOSSUtils {
      * @return regionId
      */
     private static String getRegionFromEndpoint(String endpoint) {
-        String region = "oss-cn-hangzhou";
+        String region = "cn-hangzhou";
         if (endpoint.contains("oss.aliyuncs.com") || endpoint.contains("oss-internal.aliyuncs.com")) {
             return region;
         } else {
-            String pattern = "(.*).aliyuncs.com";
+            String pattern = "oss-(.*).aliyuncs.com";
             Pattern r = Pattern.compile(pattern);
             Matcher m = r.matcher(endpoint.replace("-internal", ""));
             if (m.find()) {

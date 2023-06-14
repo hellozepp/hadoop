@@ -25,6 +25,7 @@ import com.aliyun.oss.OSSException;
 import com.aliyun.oss.common.auth.CredentialsProvider;
 import com.aliyun.oss.common.comm.Protocol;
 import com.aliyun.oss.model.AbortMultipartUploadRequest;
+import com.aliyun.oss.model.Bucket;
 import com.aliyun.oss.model.CannedAccessControlList;
 import com.aliyun.oss.model.CompleteMultipartUploadRequest;
 import com.aliyun.oss.model.CompleteMultipartUploadResult;
@@ -148,10 +149,13 @@ public class AliyunOSSFileSystemStore {
     String endPoint = conf.getTrimmed(ENDPOINT_KEY, "");
     if (StringUtils.isEmpty(endPoint)) {
       throw new IllegalArgumentException("Aliyun OSS endpoint should not be " +
-          "null or empty. Please set proper endpoint with 'fs.oss.endpoint'.");
+                                             "null or empty. Please set 'fs.oss.<bucket_name>.endpoint' or " +
+                                             "'fs.oss.endpoint'.");
     }
     CredentialsProvider provider =
         AliyunOSSUtils.getCredentialsProvider(uri, conf);
+    boolean endPointInternal = conf.getBoolean(ENDPOINT_INTERNAL, true);
+    endPoint = getEndPointByBucket(endPoint, provider, clientConf, uri.getHost(), endPointInternal);
     ossClient = new OSSClient(endPoint, provider, clientConf);
     uploadPartSize = AliyunOSSUtils.getMultipartSizeProperty(conf,
         MULTIPART_UPLOAD_PART_SIZE_KEY, MULTIPART_UPLOAD_PART_SIZE_DEFAULT);
@@ -170,6 +174,23 @@ public class AliyunOSSFileSystemStore {
     }
 
     maxKeys = conf.getInt(MAX_PAGING_KEYS_KEY, MAX_PAGING_KEYS_DEFAULT);
+  }
+
+  private String getEndPointByBucket(String endPoint, CredentialsProvider provider, ClientConfiguration clientConf,
+                                     String bucketName, boolean endPointInternal) {
+    OSSClient client = null;
+    try {
+      client = new OSSClient(endPoint, provider, clientConf);
+      Bucket bucket = client.getBucketInfo(bucketName).getBucket();
+      return endPointInternal ? bucket.getIntranetEndpoint() : bucket.getExtranetEndpoint();
+    } catch (Exception e) {
+      LOG.warn("Failed to get endPoint for {}", bucketName, e);
+    } finally {
+      if (client != null) {
+        client.shutdown();
+      }
+    }
+    return endPoint;
   }
 
   /**
@@ -519,8 +540,9 @@ public class AliyunOSSFileSystemStore {
   }
 
   public RemoteIterator<LocatedFileStatus> createLocatedFileStatusIterator(
-      final String prefix, final int maxListingLength, FileSystem fs,
-      PathFilter filter, FileStatusAcceptor acceptor, String delimiter) {
+      final String prefix, final int maxListingLength, final FileSystem fs,
+      final PathFilter filter, final FileStatusAcceptor acceptor,
+      final String delimiter) {
     return new RemoteIterator<LocatedFileStatus>() {
       private String nextMarker = null;
       private boolean firstListing = true;

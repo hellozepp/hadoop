@@ -67,6 +67,7 @@ public final class Constants {
   public static final String PROXY_USERNAME_KEY = "fs.oss.proxy.username";
   public static final String PROXY_PASSWORD_KEY = "fs.oss.proxy.password";
   public static final String PROXY_DOMAIN_KEY = "fs.oss.proxy.domain";
+  public static final String ENDPOINT_INTERNAL = "fs.oss.endpoint.internal";
   public static final String PROXY_WORKSTATION_KEY =
       "fs.oss.proxy.workstation";
 
